@@ -62,7 +62,7 @@ class ChargeStation:
                     "Origin": "https://www.enbw.com",
                     "Referer": "https://www.enbw.com/",
                 },
-                timeout=1,
+                timeout=10,
             ).json()
             if len(self.sensors) + len(self.binary_sensors) == 0:
                 self.create_entities(response)
@@ -71,8 +71,10 @@ class ChargeStation:
             for binary_sensor in self.binary_sensors:
                 binary_sensor.update_from_response(response)
 
-        except Exception as ex:  # pylint: disable=broad-except  # noqa: BLE001
-            _LOGGER.exception(ex)  # noqa: TRY401
+        except (requests.RequestException, ValueError, KeyError, IndexError):
+            _LOGGER.exception(
+                "Error fetching data for charge station %s", self.station_number
+            )
             return False
         return True
 

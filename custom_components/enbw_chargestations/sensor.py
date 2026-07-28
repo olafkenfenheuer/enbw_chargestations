@@ -1,22 +1,17 @@
 """Charge station sensor implementation"""
 
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .charge_station import ChargeStation
-
-from .const import API_KEY, DOMAIN, NAME, STATION_NUMBER
-from . import ensure_station_populated
+from . import EnbwConfigEntry
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: EnbwConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:  # pylint disable=unused-argument
     """Set up EnBw Charge station via config entry."""
-    await ensure_station_populated(hass, config_entry)
-    station: ChargeStation = hass.data[DOMAIN][config_entry.entry_id]
+    station = config_entry.runtime_data
     async_add_entities(station.sensors)
 

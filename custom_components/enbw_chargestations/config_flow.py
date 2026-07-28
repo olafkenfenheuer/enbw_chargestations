@@ -10,6 +10,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.util.location import distance
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import (
@@ -87,14 +88,16 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
                     "Origin": "https://www.enbw.com",
                     "Referer": "https://www.enbw.com/",
                 },
-                timeout=1,
+                timeout=10,
             )
             if http_response.status_code >= 400:
                 return None
             response = http_response.json()
             return ChargeStationModel(response, hass)
-        except Exception as ex:  # pylint: disable=broad-except  # noqa: BLE001
-            _LOGGER.exception(ex)
+        except (requests.RequestException, ValueError, KeyError):
+            _LOGGER.exception(
+                "Error fetching charge station %s", station_number
+            )
             return None
 
     async def async_get_charge_station(
@@ -126,7 +129,7 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
                     "Origin": "https://www.enbw.com",
                     "Referer": "https://www.enbw.com/",
                 },
-                timeout=1,
+                timeout=10,
             )
             if http_response.status_code >= 400:
                 return []
@@ -136,8 +139,8 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
             stations = [x for x in stations if x.station_number is not None]
             stations.sort(key=lambda x: x.distance_to_home)
             return stations[:15]
-        except Exception as ex:
-            _LOGGER.exception(ex)
+        except (requests.RequestException, ValueError, KeyError):
+            _LOGGER.exception("Error fetching charge stations")
             return []
 
     async def async_get_charge_stations(
@@ -216,22 +219,16 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
         """Reconfigure step."""
-        config = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        reconfigure_entry = self._get_reconfigure_entry()
 
-        data_schema = self.generate_schema_config(config)
-
-        errors = {}
+        data_schema = self.generate_schema_config(reconfigure_entry)
 
         if user_input is not None:
-            try:
-                self.hass.config_entries.async_update_entry(
-                    entry=config, data=user_input
-                )
-                await self.hass.config_entries.async_reload(config.entry_id)
-                return self.async_abort(reason="reconfigure_successful")
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unknown exception.")
-                errors["base"] = "Unknown exception."
+            return self.async_update_reload_and_abort(
+                reconfigure_entry,
+                data=user_input,
+                reason="reconfigure_successful",
+            )
 
         return self.async_show_form(
             step_id="reconfigure",
@@ -279,13 +276,16 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
                         data_schema=vol.Schema(self.generate_schema_select()),
                     )
 
-                self._async_abort_entries_match({STATION_NUMBER: self.station_number})
+                await self.async_set_unique_id(str(self.station_number))
+                self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=user_input.get(
                         NAME,
                     ),
                     data=user_input,
                 )
+            except AbortFlow:
+                raise
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unknown exception.")
                 errors["base"] = "Unknown exception."
@@ -300,7 +300,8 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 self.station_number = user_input[STATION_NUMBER]
-                self._async_abort_entries_match({STATION_NUMBER: self.station_number})
+                await self.async_set_unique_id(str(self.station_number))
+                self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=self.name,
                     data={
@@ -309,6 +310,8 @@ class EnbwChargeStationsConfigFlow(ConfigFlow, domain=DOMAIN):
                         NAME: self.name,
                     },
                 )
+            except AbortFlow:
+                raise
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unknown exception.")
                 errors["base"] = "Unknown exception."
