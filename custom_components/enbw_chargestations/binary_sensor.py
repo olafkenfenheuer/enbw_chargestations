@@ -158,25 +158,25 @@ class ChargePointBinarySensor(EnbwEntity, BinarySensorEntity):
 
     @property
     def icon(self) -> str:
-        """Return the icon based on plug type and occupancy."""
+        """Return the icon based on plug type, power and occupancy."""
         point = self._point()
         if point is None:
             return "mdi:car-electric"
-        plug_type_names = [
-            connector.get("plugTypeName") for connector in point.get("connectors", [])
-        ]
+        connectors = point.get("connectors", [])
         if self.is_on:
             return "mdi:car-electric-outline"
-        if len(plug_type_names) > 1:
+        if len(connectors) > 1:
             return "mdi:car-electric"
-        first = plug_type_names[0] if plug_type_names else None
-        if first in ("Typ 2", "Type 2"):
-            return "mdi:ev-plug-type2"
-        if first == "CCS (Typ 2)":
-            return "mdi:ev-plug-ccs2"
-        if first == "CHAdeMO":
+        connector = connectors[0] if connectors else None
+        plug_type_name = connector.get("plugTypeName") if connector else None
+        if plug_type_name == "CHAdeMO":
             return "mdi:ev-plug-chademo"
-        return "mdi:car-electric"
+        if plug_type_name and "tesla" in plug_type_name.lower():
+            return "mdi:ev-plug-tesla"
+        max_power = connector.get("maxPowerInKw") if connector else None
+        if max_power is not None and max_power > 22:
+            return "mdi:ev-plug-ccs2"
+        return "mdi:ev-plug-type2"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
