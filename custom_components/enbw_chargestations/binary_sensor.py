@@ -44,8 +44,12 @@ async def async_setup_entry(
 
     data = coordinator.data or {}
     for index, point in enumerate(data.get("chargePoints", []), start=1):
+        max_power = max(
+            (c.get("maxPowerInKw", 0) for c in point.get("connectors", [])),
+            default=0,
+        )
         entities.append(
-            ChargePointBinarySensor(coordinator, point["evseId"], index)
+            ChargePointBinarySensor(coordinator, point["evseId"], index, max_power)
         )
 
     async_add_entities(entities)
@@ -124,11 +128,15 @@ class ChargePointBinarySensor(EnbwEntity, BinarySensorEntity):
         coordinator: EnbwDataUpdateCoordinator,
         point_id: str,
         index: int,
+        max_power_in_kw: float,
     ) -> None:
         """Initialize a charge point binary sensor."""
         super().__init__(coordinator)
         self._point_id = point_id
-        self._attr_translation_placeholders = {"index": str(index)}
+        self._attr_translation_placeholders = {
+            "index": str(index),
+            "power": f"{max_power_in_kw:g}",
+        }
         self._attr_unique_id = (
             f"enbw_station_{coordinator.station_number}_charge_point_{index}"
         )
